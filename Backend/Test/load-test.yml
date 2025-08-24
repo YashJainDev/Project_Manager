@@ -1,0 +1,86 @@
+config:
+  target: "http://localhost:8080"
+  phases:
+    - duration: 60
+      arrivalRate: 5
+      rampTo: 10
+      name: "Warm up phase"
+    - duration: 60
+      arrivalRate: 10
+      rampTo: 10
+      name: "Ramp up to Peak Load"
+  plugins:
+    faker: {}
+  http:
+    pool : 0
+  processor: "./processor.cjs"
+
+scenarios:
+  - name: "User full flow test"
+    flow:
+      # 1. Register user
+      - function: "generateUser"
+      - log: "Registering {{ username }}"
+      - post:
+          url: "/app/user/register"
+          json:
+            username: "{{ username }}"
+            email: "{{ email }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.success"
+              as: "registered"
+
+      # 2. Login user
+      - log: "Logging in {{ username }}"
+      - post:
+          url: "/app/user/login"
+          json:
+            username: "{{ username }}"
+            password: "{{ password }}"
+          capture:
+            - json: "$.accessToken"
+              as: "token"
+
+      # 3. Call protected routes with token
+      - log: "Calling protected routes for {{ username }} "
+
+      - post:
+          url: "/app/project/save"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          json:
+            title: "Project {{ $randomNumber }}"
+            description: "Load test project"
+          capture:
+            - json: "$.project_id"
+              as: "project_id"
+
+      - get:
+          url: "/app/project/getProjectById"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          qs:
+            project_id: "{{ project_id }}"
+
+      - get:
+          url: "/app/project/get"
+          headers:
+            Authorization: "Bearer {{ token }}"
+
+      - patch:
+          url: "/app/project/update"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          json:
+            project_id : "{{ project_id }}"
+            title : "Updated Project"
+
+      - delete:
+          url: "/app/project/delete"
+          headers:
+            Authorization: "Bearer {{ token }}"
+          json:
+            project_id : "{{ project_id }}"
+
+      - think: 1
